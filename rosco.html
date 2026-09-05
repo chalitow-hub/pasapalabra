@@ -50,25 +50,23 @@
     const abecedario = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
     let audioCtx = null;
     let audioHabilitado = false;
-    let ultimoTimestampProcesado = 0;
 
     function toggleAudio() {
       if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
       }
 
       audioHabilitado = !audioHabilitado;
       const btn = document.getElementById('audio-btn');
 
       if (audioHabilitado) {
+        audioCtx.resume();
         btn.innerText = '🔊 Sonido: ON';
         btn.style.background = '#22c55e';
         btn.style.color = '#ffffff';
         btn.style.borderColor = '#4ade80';
       } else {
+        audioCtx.suspend();
         btn.innerText = '🔇 Sonido: OFF';
         btn.style.background = '#334155';
         btn.style.color = '#94a3b8';
@@ -77,8 +75,7 @@
     }
 
     function reproducirSonido(tipo) {
-      if (!audioHabilitado || !audioCtx) return;
-      if (audioCtx.state === 'suspended') audioCtx.resume();
+      if (!audioHabilitado || !audioCtx || audioCtx.state !== 'running') return;
 
       const now = audioCtx.currentTime;
 
@@ -160,13 +157,6 @@
     function renderState(state) {
       if (!state) return;
 
-      if (state._t && state._t !== ultimoTimestampProcesado) {
-        if (state.lastAction) {
-          reproducirSonido(state.lastAction);
-        }
-        ultimoTimestampProcesado = state._t;
-      }
-
       document.getElementById("panel-eq1").classList.toggle("active-team", state.equipoActivo === 1);
       document.getElementById("panel-eq2").classList.toggle("active-team", state.equipoActivo === 2);
       document.getElementById("timer1").innerText = state.eq1.tiempo;
@@ -192,7 +182,10 @@
     const peer = new Peer("pasapalabra-tv-cumple");
     peer.on('connection', (conn) => {
       conn.on('data', (data) => {
-        renderState(data);
+        if (data) {
+          if (data.state) renderState(data.state);
+          if (data.sound) reproducirSonido(data.sound);
+        }
       });
     });
   </script>
