@@ -59,9 +59,9 @@
     <label for="selectLetra"><b>Letra Actual:</b> </label>
     <select id="selectLetra" onchange="cambiarLetraManual()"></select>
     <br><br>
-    <button class="btn-ok" onclick="enviarEstado('correcta')">Correcta</button>
-    <button class="btn-bad" onclick="enviarEstado('incorrecta')">Incorrecta</button>
-    <button class="btn-pass" onclick="enviarEstado('pasapalabra')">Pasapalabra</button>
+    <button class="btn-ok" onclick="enviarEstado('correcta')">Correcta (Verde)</button>
+    <button class="btn-bad" onclick="enviarEstado('incorrecta')">Incorrecta (Rojo)</button>
+    <button class="btn-pass" onclick="enviarEstado('pasapalabra')">Pasapalabra (Amarillo)</button>
     <br>
     <button class="btn-clear" onclick="limpiarLetraActual()">Reiniciar Letra (Gris)</button>
   </div>
@@ -116,15 +116,13 @@
       conectarTV();
     });
 
-    function saveAndEmit(action = null) {
-      state._t = Date.now();
-      state.lastAction = action;
-
+    function saveAndEmit(soundEffect = null) {
       if (conn && conn.open) {
-        conn.send(state);
+        conn.send({
+          state: state,
+          sound: soundEffect
+        });
       }
-
-      state.lastAction = null;
       updateUI();
     }
 
@@ -213,6 +211,10 @@
         eqState.letraActiva = sigLetra;
       } else {
         eqState.letraActiva = null;
+      }
+
+      // Pausa automática del tiempo en respuesta incorrecta o pasapalabra
+      if (estado === 'incorrecta' || estado === 'pasapalabra' || !sigLetra) {
         pauseTimer();
       }
 
