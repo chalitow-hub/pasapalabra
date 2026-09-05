@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Control Pasapalabra - Equipos</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 15px; background: #f8fafc; text-align: center; color: #0f172a; }
+    .card { background: white; padding: 15px; border-radius: 10px; max-width: 500px; margin: 10px auto; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .team-selector { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
+    .team-btn { flex: 1; padding: 12px; border: 2px solid #cbd5e1; font-weight: bold; border-radius: 8px; cursor: pointer; background: #f1f5f9; }
+    .team-btn.active-1 { background: #3b82f6; color: white; border-color: #1d4ed8; }
+    .team-btn.active-2 { background: #f97316; color: white; border-color: #c2410c; }
+    button { padding: 10px 16px; margin: 4px; font-size: 1rem; cursor: pointer; border-radius: 6px; border: none; font-weight: bold; }
+    .btn-ok { background: #22c55e; color: white; }
+    .btn-bad { background: #ef4444; color: white; }
+    .btn-pass { background: #eab308; color: white; }
+    .btn-clear { background: #64748b; color: white; }
+    .btn-timer { background: #0ea5e9; color: white; }
+    .timer-display { font-size: 2.5rem; font-weight: bold; margin: 5px 0; }
+    select, input[type="number"] { font-size: 1.1rem; padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center; }
+    .manual-time-box { margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: flex; justify-content: center; align-items: center; gap: 8px; }
+    #status { font-weight: bold; padding: 6px; border-radius: 6px; margin-bottom: 10px; display: inline-block; }
+  </style>
+</head>
+<body>
+
+  <h2>Control Pasapalabra</h2>
+  <div id="status" style="background: #fee2e2; color: #dc2626;">🔴 Conectando a la TV...</div>
+
+  <!-- SELECTOR DE EQUIPO -->
+  <div class="card">
+    <label><b>Turno Actual:</b></label>
+    <div class="team-selector">
+      <button id="btnEq1" class="team-btn active-1" onclick="cambiarEquipo(1)">Equipo 1</button>
+      <button id="btnEq2" class="team-btn" onclick="cambiarEquipo(2)">Equipo 2</button>
+    </div>
+  </div>
+
+  <!-- CONTROL DE TIEMPO -->
+  <div class="card">
+    <div>Tiempo Restante (<span id="lblTeam">Equipo 1</span>)</div>
+    <div class="timer-display" id="controlTimer">150</div>
+    
+    <div>
+      <button class="btn-timer" onclick="startTimer()">Iniciar</button>
+      <button class="btn-timer" style="background:#f97316" onclick="pauseTimer()">Pausar</button>
+    </div>
+
+    <div class="manual-time-box">
+      <label for="inputTime">Setear tiempo:</label>
+      <input type="number" id="inputTime" value="150" min="0" max="999" style="width: 70px;">
+      <button class="btn-timer" style="background:#64748b" onclick="setearTiempoManual()">Guardar</button>
+    </div>
+  </div>
+
+  <!-- CONTROL DEL ROSCO -->
+  <div class="card">
+    <label for="selectLetra"><b>Letra Actual:</b> </label>
+    <select id="selectLetra" onchange="cambiarLetraManual()"></select>
+    <br><br>
+    <button class="btn-ok" onclick="enviarEstado('correcta')">Correcta</button>
+    <button class="btn-bad" onclick="enviarEstado('incorrecta')">Incorrecta</button>
+    <button class="btn-pass" onclick="enviarEstado('pasapalabra')">Pasapalabra</button>
+    <br>
+    <button class="btn-clear" onclick="limpiarLetraActual()">Reiniciar Letra (Gris)</button>
+  </div>
+
+  <div style="margin-top:15px;">
+    <button style="background: #ef4444; color: white;" onclick="resetearTodo()">Reiniciar Juego Completo</button>
+  </div>
+
+  <script>
+    const abecedario = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
+    
+    let state = {
+      equipoActivo: 1,
+      eq1: { tiempo: 150, letraActiva: "A", estados: {} },
+      eq2: { tiempo: 150, letraActiva: "A", estados: {} }
+    };
+
+    let timerInterval = null;
+    let conn = null;
+
+    const select = document.getElementById("selectLetra");
+    abecedario.forEach(l => {
+      const opt = document.createElement("option");
+      opt.value = l;
+      opt.innerText = l;
+      select.appendChild(opt);
+    });
+
+    const peer = new Peer();
+
+    function conectarTV() {
+      conn = peer.connect('pasapalabra-tv-cumple');
+
+      conn.on('open', () => {
+        const st = document.getElementById('status');
+        st.innerText = "🟢 Conectado a la TV";
+        st.style.background = "#dcfce7";
+        st.style.color = "#15803d";
+        saveAndEmit();
+      });
+
+      conn.on('close', () => {
+        const st = document.getElementById('status');
+        st.innerText = "🔴 Desconectado (Reintentando...)";
+        st.style.background = "#fee2e2";
+        st.style.color = "#dc2626";
+        setTimeout(conectarTV, 2000);
+      });
+    }
+
+    peer.on('open', () => {
+      conectarTV();
+    });
+
+    function saveAndEmit(action = null) {
+      state._t = Date.now();
+      state.lastAction = action;
+
+      if (conn && conn.open) {
+        conn.send(state);
+      }
+
+      state.lastAction = null;
+      updateUI();
+    }
+
+    function updateUI() {
+      const eqKey = `eq${state.equipoActivo}`;
+      document.getElementById("lblTeam").innerText = `Equipo ${state.equipoActivo}`;
+      document.getElementById("controlTimer").innerText = state[eqKey].tiempo;
+      document.getElementById("inputTime").value = state[eqKey].tiempo;
+      
+      if (state[eqKey].letraActiva) {
+        select.value = state[eqKey].letraActiva;
+      }
+
+      document.getElementById("btnEq1").className = `team-btn ${state.equipoActivo === 1 ? 'active-1' : ''}`;
+      document.getElementById("btnEq2").className = `team-btn ${state.equipoActivo === 2 ? 'active-2' : ''}`;
+    }
+
+    function cambiarEquipo(num) {
+      pauseTimer();
+      state.equipoActivo = num;
+      saveAndEmit();
+    }
+
+    function setearTiempoManual() {
+      pauseTimer();
+      const val = parseInt(document.getElementById("inputTime").value, 10);
+      if (!isNaN(val) && val >= 0) {
+        state[`eq${state.equipoActivo}`].tiempo = val;
+        saveAndEmit();
+      }
+    }
+
+    function startTimer() {
+      if (timerInterval) return;
+      timerInterval = setInterval(() => {
+        const eqKey = `eq${state.equipoActivo}`;
+        if (state[eqKey].tiempo > 0) {
+          state[eqKey].tiempo--;
+          if (state[eqKey].tiempo === 0) {
+            pauseTimer();
+            saveAndEmit('tiempofin');
+          } else {
+            saveAndEmit();
+          }
+        } else {
+          pauseTimer();
+        }
+      }, 1000);
+    }
+
+    function pauseTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    function cambiarLetraManual() {
+      state[`eq${state.equipoActivo}`].letraActiva = select.value;
+      saveAndEmit();
+    }
+
+    function obtenerSiguienteLetra(letraActual, estados) {
+      const total = abecedario.length;
+      let currIdx = abecedario.indexOf(letraActual);
+
+      for (let i = 1; i <= total; i++) {
+        let nextIdx = (currIdx + i) % total;
+        let cand = abecedario[nextIdx];
+        if (estados[cand] !== "correcta" && estados[cand] !== "incorrecta") {
+          return cand;
+        }
+      }
+      return null;
+    }
+
+    function enviarEstado(estado) {
+      const eqKey = `eq${state.equipoActivo}`;
+      const eqState = state[eqKey];
+      const letraActual = select.value;
+      
+      if (!eqState.estados) eqState.estados = {};
+      eqState.estados[letraActual] = estado;
+
+      const sigLetra = obtenerSiguienteLetra(letraActual, eqState.estados);
+
+      if (sigLetra) {
+        eqState.letraActiva = sigLetra;
+      } else {
+        eqState.letraActiva = null;
+        pauseTimer();
+      }
+
+      saveAndEmit(estado);
+    }
+
+    function limpiarLetraActual() {
+      const eqKey = `eq${state.equipoActivo}`;
+      const eqState = state[eqKey];
+      const letraActual = select.value;
+
+      if (eqState.estados) {
+        delete eqState.estados[letraActual];
+      }
+      eqState.letraActiva = letraActual;
+
+      saveAndEmit();
+    }
+
+    function resetearTodo() {
+      if (confirm("¿Estás seguro de reiniciar todo el juego?")) {
+        pauseTimer();
+        state = {
+          equipoActivo: 1,
+          eq1: { tiempo: 150, letraActiva: "A", estados: {} },
+          eq2: { tiempo: 150, letraActiva: "A", estados: {} }
+        };
+        saveAndEmit();
+      }
+    }
+  </script>
+</body>
+</html>

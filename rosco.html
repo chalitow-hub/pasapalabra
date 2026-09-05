@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Pasapalabra - TV En Equipos</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <style>
+    body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: space-evenly; align-items: center; height: 100vh; margin: 0; overflow: hidden; position: relative; }
+    .team-panel { display: flex; flex-direction: column; align-items: center; padding: 20px; border-radius: 16px; background: #1e293b; border: 3px solid transparent; transition: all 0.3s; }
+    .team-panel.active-team { border-color: #f59e0b; box-shadow: 0 0 25px rgba(245, 158, 11, 0.4); }
+    .team-title { font-size: 1.8rem; font-weight: bold; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+    .badge-turn { font-size: 0.8rem; background: #f59e0b; color: #0f172a; padding: 3px 8px; border-radius: 12px; display: none; }
+    .active-team .badge-turn { display: inline-block; }
+    .rosco-container { position: relative; width: 380px; height: 380px; border-radius: 50%; }
+    .letra { position: absolute; width: 34px; height: 34px; border-radius: 50%; background: #334155; border: 2px solid #38bdf8; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 0.95rem; transform: translate(-50%, -50%); transition: all 0.2s; color: white; }
+    .letra.correcta { background: #22c55e; border-color: #4ade80; }
+    .letra.incorrecta { background: #ef4444; border-color: #f87171; }
+    .letra.pasapalabra { background: #eab308; border-color: #fde047; }
+    .letra.activa { transform: translate(-50%, -50%) scale(1.35); border-color: #ffffff; box-shadow: 0 0 12px #ffffff; z-index: 10; }
+    .timer-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3.5rem; font-weight: bold; color: #f8fafc; text-align: center; }
+    .team1-color { color: #60a5fa; }
+    .team2-color { color: #fb923c; }
+    
+    #audio-btn {
+      position: absolute; top: 15px; right: 15px; background: #334155; color: #94a3b8;
+      border: 1px solid #64748b; padding: 8px 16px; border-radius: 20px; font-weight: bold;
+      cursor: pointer; z-index: 100; user-select: none; transition: all 0.2s;
+    }
+  </style>
+</head>
+<body>
+
+  <button id="audio-btn" onclick="toggleAudio()">🔇 Sonido: OFF</button>
+
+  <div class="team-panel" id="panel-eq1">
+    <div class="team-title team1-color">Equipo 1 <span class="badge-turn">TURNO</span></div>
+    <div class="rosco-container" id="rosco1">
+      <div class="timer-display" id="timer1">150</div>
+    </div>
+  </div>
+
+  <div class="team-panel" id="panel-eq2">
+    <div class="team-title team2-color">Equipo 2 <span class="badge-turn">TURNO</span></div>
+    <div class="rosco-container" id="rosco2">
+      <div class="timer-display" id="timer2">150</div>
+    </div>
+  </div>
+
+  <script>
+    const abecedario = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
+    let audioCtx = null;
+    let audioHabilitado = false;
+    let ultimoTimestampProcesado = 0;
+
+    function toggleAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      audioHabilitado = !audioHabilitado;
+      const btn = document.getElementById('audio-btn');
+
+      if (audioHabilitado) {
+        btn.innerText = '🔊 Sonido: ON';
+        btn.style.background = '#22c55e';
+        btn.style.color = '#ffffff';
+        btn.style.borderColor = '#4ade80';
+      } else {
+        btn.innerText = '🔇 Sonido: OFF';
+        btn.style.background = '#334155';
+        btn.style.color = '#94a3b8';
+        btn.style.borderColor = '#64748b';
+      }
+    }
+
+    function reproducirSonido(tipo) {
+      if (!audioHabilitado || !audioCtx) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      const now = audioCtx.currentTime;
+
+      if (tipo === 'correcta') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(659.25, now);
+        osc.frequency.setValueAtTime(880, now + 0.12);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.4);
+      } else if (tipo === 'incorrecta') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.linearRampToValueAtTime(110, now + 0.35);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } else if (tipo === 'pasapalabra') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(650, now + 0.15);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      } else if (tipo === 'tiempofin') {
+        [0, 0.15, 0.3].forEach((delay) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(440, now + delay);
+          gain.gain.setValueAtTime(0.2, now + delay);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.1);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now + delay);
+          osc.stop(now + delay + 0.1);
+        });
+      }
+    }
+
+    function armarRosco(containerId, prefix) {
+      const container = document.getElementById(containerId);
+      const total = abecedario.length;
+      const radius = 150, centerX = 190, centerY = 190;
+
+      abecedario.forEach((letra, index) => {
+        const angle = (index / total) * 2 * Math.PI - (Math.PI / 2);
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+
+        const div = document.createElement("div");
+        div.className = "letra";
+        div.id = `${prefix}-letra-${letra}`;
+        div.innerText = letra;
+        div.style.left = `${x}px`;
+        div.style.top = `${y}px`;
+        container.appendChild(div);
+      });
+    }
+
+    armarRosco("rosco1", "eq1");
+    armarRosco("rosco2", "eq2");
+
+    function renderState(state) {
+      if (!state) return;
+
+      if (state._t && state._t !== ultimoTimestampProcesado) {
+        if (state.lastAction) {
+          reproducirSonido(state.lastAction);
+        }
+        ultimoTimestampProcesado = state._t;
+      }
+
+      document.getElementById("panel-eq1").classList.toggle("active-team", state.equipoActivo === 1);
+      document.getElementById("panel-eq2").classList.toggle("active-team", state.equipoActivo === 2);
+      document.getElementById("timer1").innerText = state.eq1.tiempo;
+      document.getElementById("timer2").innerText = state.eq2.tiempo;
+
+      abecedario.forEach(l => {
+        const el1 = document.getElementById(`eq1-letra-${l}`);
+        if (el1) {
+          el1.className = "letra";
+          if (state.eq1.estados && state.eq1.estados[l]) el1.classList.add(state.eq1.estados[l]);
+          if (state.equipoActivo === 1 && state.eq1.letraActiva === l) el1.classList.add("activa");
+        }
+
+        const el2 = document.getElementById(`eq2-letra-${l}`);
+        if (el2) {
+          el2.className = "letra";
+          if (state.eq2.estados && state.eq2.estados[l]) el2.classList.add(state.eq2.estados[l]);
+          if (state.equipoActivo === 2 && state.eq2.letraActiva === l) el2.classList.add("activa");
+        }
+      });
+    }
+
+    const peer = new Peer("pasapalabra-tv-cumple");
+    peer.on('connection', (conn) => {
+      conn.on('data', (data) => {
+        renderState(data);
+      });
+    });
+  </script>
+</body>
+</html>
